@@ -1,0 +1,13 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+
+# 秘密情報を絶対に含めないための保険（万一の誤コミット対策）
+*.env
+*.pem
+*.key
+secrets/

@@ -1,0 +1,78 @@
+#!/bin/sh
+#
+# second-brain: 秘密情報の誤コミットを防ぐ pre-commit フック
+#
+# GitHub の push protection は無料プランの private リポジトリでは利用できないため、
+# その代替としてローカルで最低限のチェックを行う。
+# ステージされた「追加行」だけを走査し、認証情報らしき文字列があればコミットを中断する。
+#
+# 有効化: git config core.hooksPath .githooks
+#   （新規リポジトリでは init.templateDir により .git/hooks/ へ自動でコピーされる）
+# 緊急回避: git commit --no-verify （誤検知と確信できる場合のみ）
+
+RED=$(printf '\033[31m')
+RESET=$(printf '\033[0m')
+
+# 検出パターン（説明|フラグ|正規表現）
+#
+# フラグに i を付けたものだけ大文字小文字を無視する。
+# ★かつて全パターンを grep -Ein で走査しており、base64 の塊の中の
+#   "AKIAqUyriKBgqti3lLrQ" のような並びが AWS キーとして誤検知された。
+#   AWSキー・秘密鍵・JWT などは表記が決まっているので区別する。
+#   曖昧なのは「代入っぽい記述」だけなので、そこにだけ i を付ける。
+PATTERNS='GitHub トークン||gh[pousr]_[A-Za-z0-9]{36}
+Anthropic APIキー||sk-ant-[A-Za-z0-9_-]{20,}
+OpenAI APIキー||sk-(proj-)?[A-Za-z0-9]{32,}
+AWS アクセスキーID||AKIA[0-9A-Z]{16}
+Google APIキー||AIza[0-9A-Za-z_-]{35}
+Slack トークン||xox[baprs]-[A-Za-z0-9-]{10,}
+秘密鍵ファイルの中身||-----BEGIN [A-Z ]*PRIVATE KEY-----
+JSON Web Token||eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.
+パスワード/キーの代入|i|(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)[[:space:]]*[:=][[:space:]]*.?[A-Za-z0-9/+_-]{12,}'
+
+files=$(git diff --cached --name-only --diff-filter=ACM)
+for file in $files; do
+  # フック自身はパターン定義を含むため除外する
+  case "$file" in
+    .githooks/*) continue ;;
+  esac
+
+  added=$(git diff --cached -U0 --diff-filter=ACM -- "$file" | sed -n 's/^+\([^+]\)/\1/p;s/^+$//p')
+  [ -z "$added" ] && continue
+
+  echo "$PATTERNS" | while IFS='|' read -r label flags regex; do
+    [ -z "$regex" ] && continue
+    # -e を必ず付ける。付けないと "-----BEGIN ... PRIVATE KEY-----" のように
+    # ハイフンで始まるパターンを grep がオプションと誤解し、素通りしてしまう。
+    case "$flags" in
+      *i*) hits=$(printf '%s\n' "$added" | grep -Ein -e "$regex" 2>/dev/null) ;;
+      *)   hits=$(printf '%s\n' "$added" | grep -En  -e "$regex" 2>/dev/null) ;;
+    esac
+    if [ -n "$hits" ]; then
+      echo "${RED}秘密情報の疑い${RESET} [$label] $file"
+      printf '%s\n' "$hits" | sed 's/^/    /' | cut -c1-160
+      echo "FOUND" >> "$(git rev-parse --git-dir)/.secret-scan-hit"
+    fi
+  done
+done
+
+hitfile="$(git rev-parse --git-dir)/.secret-scan-hit"
+if [ -f "$hitfile" ]; then
+  rm -f "$hitfile"
+  cat <<'MSG'
+
+--------------------------------------------------------------------
+コミットを中断しました。上記の行に認証情報が含まれていないか確認してください。
+
+  * 本物の認証情報だった場合:
+      ステージから外し（git restore --staged <file>）、該当の値をファイルから
+      削除したうえで、その認証情報自体を発行元で失効・再発行してください。
+      （一度コミットするとGitの履歴からは消せません）
+  * 誤検知だと確信できる場合:
+      git commit --no-verify
+--------------------------------------------------------------------
+MSG
+  exit 1
+fi
+
+exit 0
