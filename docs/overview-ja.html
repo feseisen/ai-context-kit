@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生成AIに前提を渡す — 個人での実験と、そこで分かったこと</title>
+<!--
+  社内紹介用のスライド。16:9。F5 か右下のボタンで全画面。← → で移動。
+
+  外部のファイルを一切参照していません。保存してローカルで開けば、
+  そのまま全機能が動きます（Webフォントも CDN も画像も使っていません）。
+
+  本文の正典は同じフォルダの overview-ja.md です。数字を直すときは両方直してください。
+  publish/check_overview_sync.py が、主要な数字の食い違いを検出します。
+-->
+<style>
+  :root{
+    color-scheme: dark;
+    --ground:#0f1116; --panel:#171a21; --panel-2:#1d212a;
+    --ink:#e9ecf2; --ink-soft:#9aa3b3; --ink-faint:#626d80;
+    --rule:#242833; --accent:#e0653a; --accent-dim:#3a2219;
+    --jp:"Yu Gothic UI","Hiragino Sans","Hiragino Kaku Gothic ProN","Meiryo",system-ui,sans-serif;
+    --num:"Segoe UI","Helvetica Neue",Arial,var(--jp);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--ground)}
+  body{font-family:var(--jp);color:var(--ink);-webkit-font-smoothing:antialiased}
+
+  /* 1280x720 の設計座標を、画面に合わせて拡大縮小する。
+     どの画面でも同じ配置になるのが、資料としては一番大事。 */
+  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #deck{width:1280px;height:720px;position:relative;transform-origin:center center;
+        background:var(--ground);overflow:hidden}
+
+  .slide{position:absolute;inset:0;padding:56px 76px;display:none;flex-direction:column;justify-content:center}
+  .slide.on{display:flex}
+
+  /* 見出し */
+  .eyebrow{font-size:15px;letter-spacing:.16em;color:var(--ink-faint);font-weight:700;margin-bottom:14px}
+  .eyebrow .n{color:var(--accent)}
+  h2{font-size:40px;line-height:1.3;font-weight:700;letter-spacing:.01em;margin-bottom:10px}
+  h2 em{font-style:normal;color:var(--accent)}
+  .lede{font-size:19px;line-height:1.7;color:var(--ink-soft);max-width:68ch}
+  .body{margin-top:auto;margin-bottom:auto}
+
+  /* 表紙 */
+  .cover{justify-content:center}
+  .cover h1{font-size:60px;line-height:1.35;font-weight:700;letter-spacing:.01em;margin-bottom:26px}
+  .cover h1 em{font-style:normal;color:var(--accent)}
+  .cover .sub{font-size:21px;color:var(--ink-soft);line-height:1.75;max-width:60ch}
+  .cover .rule{width:96px;height:5px;background:var(--accent);margin-bottom:34px}
+  .cover .foot{position:absolute;left:76px;bottom:64px;font-size:14px;color:var(--ink-faint);line-height:1.9}
+
+  /* 数字タイル */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:38px}
+  .tile{background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:30px 28px 26px;
+        display:flex;flex-direction:column}
+  .tile .fig{font-family:var(--num);font-size:76px;line-height:1;font-weight:700;letter-spacing:-.03em;
+             color:var(--accent);font-variant-numeric:tabular-nums}
+  .tile .fig .u{font-size:30px;letter-spacing:0;margin-left:4px}
+  .tile .cap{margin-top:16px;font-size:18px;font-weight:700;line-height:1.5}
+  .tile .note{margin-top:9px;font-size:14.5px;color:var(--ink-soft);line-height:1.65}
+
+  /* 横棒（大きさの比較） */
+  .bars{margin-top:34px;display:flex;flex-direction:column;gap:26px}
+  .bar-row{display:grid;grid-template-columns:230px 1fr;align-items:center;gap:24px}
+  .bar-label{text-align:right;font-size:17px;line-height:1.5;color:var(--ink-soft)}
+  .bar-label b{display:block;color:var(--ink);font-size:18px}
+  .bar-track{position:relative;height:52px;display:flex;align-items:center}
+  .bar{height:52px;border-radius:0 6px 6px 0;background:var(--ink-faint)}
+  .bar.hot{background:var(--accent)}
+  .bar-val{font-family:var(--num);font-size:27px;font-weight:700;margin-left:16px;
+           font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bar.hot + .bar-val{color:var(--accent)}
+
+  /* 100%の帯 */
+  .stack{margin-top:30px;display:flex;height:74px;border-radius:8px;overflow:hidden;gap:2px}
+  .seg{display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;
+       color:#0f1116;padding:0 10px;text-align:center;line-height:1.35}
+  .seg.a{background:var(--accent)}
+  .seg.b{background:#9aa3b3}
+  .seg.c{background:#626d80;color:var(--ink)}
+  .stack-key{margin-top:16px;display:flex;gap:26px;flex-wrap:wrap;font-size:15px;color:var(--ink-soft)}
+  .stack-key span{display:flex;align-items:center;gap:8px}
+  .sw{width:13px;height:13px;border-radius:3px;flex:none}
+
+  /* カード */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:36px}
+  .card{background:var(--panel);border:1px solid var(--rule);border-radius:13px;padding:26px 24px}
+  .card .num{font-family:var(--num);font-size:15px;font-weight:700;color:var(--accent);letter-spacing:.1em}
+  .card h3{font-size:21px;font-weight:700;margin:12px 0 11px;line-height:1.45}
+  .card p{font-size:15px;line-height:1.75;color:var(--ink-soft)}
+
+  /* 箇条 */
+  .points{margin-top:30px;display:flex;flex-direction:column;gap:20px}
+  .point{display:grid;grid-template-columns:44px 1fr;gap:20px;align-items:start}
+  .point .k{font-family:var(--num);font-size:21px;font-weight:700;color:var(--accent);
+            border-top:3px solid var(--accent);padding-top:9px}
+  .point h3{font-size:21px;font-weight:700;margin-bottom:7px;line-height:1.5}
+  .point p{font-size:16px;line-height:1.75;color:var(--ink-soft);max-width:72ch}
+
+  /* 段階のトラック */
+  .track{margin-top:40px;display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  .step{border-top:4px solid var(--rule);padding-top:15px}
+  .step.done{border-top-color:var(--accent)}
+  .step .s{font-family:var(--num);font-size:14px;color:var(--ink-faint);font-weight:700}
+  .step.done .s{color:var(--accent)}
+  .step .t{font-size:16px;margin-top:8px;line-height:1.5;color:var(--ink-soft)}
+  .step.done .t{color:var(--ink);font-weight:700}
+
+  /* 図 */
+  figure{margin-top:26px}
+  figure svg{width:100%;height:auto;color:var(--ink-soft)}
+  figcaption{margin-top:14px;font-size:15px;color:var(--ink-faint);line-height:1.7}
+
+  /* 参照 */
+  .refs{margin-top:34px;display:flex;flex-direction:column;gap:16px}
+  .ref{display:grid;grid-template-columns:270px 1fr;gap:22px;align-items:baseline;
+       padding-bottom:15px;border-bottom:1px solid var(--rule)}
+  .ref b{font-size:17px}
+  .ref span{font-family:var(--num);font-size:15px;color:var(--accent);word-break:break-all}
+
+  .kicker{margin-top:28px;font-size:17px;line-height:1.8;color:var(--ink-soft);
+          border-left:4px solid var(--accent);padding-left:20px;max-width:74ch}
+  .kicker b{color:var(--ink)}
+
+  /* 操作まわり */
+  #bar{position:fixed;left:0;right:0;bottom:0;height:3px;background:var(--rule);z-index:5}
+  #bar i{display:block;height:100%;background:var(--accent);transition:width .18s}
+  #hud{position:fixed;right:18px;bottom:16px;display:flex;align-items:center;gap:10px;z-index:6}
+  #hud button{font-family:var(--jp);font-size:13px;font-weight:700;color:var(--ink-soft);
+              background:var(--panel-2);border:1px solid var(--rule);border-radius:7px;
+              padding:7px 13px;cursor:pointer}
+  #hud button:hover{color:var(--ink);border-color:var(--ink-faint)}
+  #count{font-family:var(--num);font-size:13px;color:var(--ink-faint);
+         font-variant-numeric:tabular-nums;letter-spacing:.06em}
+  :fullscreen #hud{opacity:0;transition:opacity .3s}
+  :fullscreen #hud:hover{opacity:1}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+  /* 図の中の要素。SVG の中に style を置かず、ここで当てる */
+  .dh{font-size:17px;font-weight:700;fill:var(--ink)}
+  .dt{font-size:19px;font-weight:700;fill:var(--ink)}
+  .ds{font-size:15px;fill:var(--ink-soft)}
+  .de{font-size:14px;fill:var(--ink-soft)}
+  .dn{font-size:14px;fill:var(--ink-faint)}
+  .bad{fill:#e0653a}
+  .dbox{fill:#171a21;stroke:#626d80;stroke-width:1.5}
+  .dbox.bad{fill:#1f1613;stroke:#e0653a}
+  .dsplit{stroke:#242833;stroke-width:1;stroke-dasharray:3 5}
+  .darr{stroke:#9aa3b3;stroke-width:2;stroke-dasharray:6 5;fill:none}
+  .darr.bad{stroke:#e0653a;stroke-dasharray:none}
+  .grid line{stroke:#242833;stroke-width:1.5}
+  .gl{font-size:15px;fill:var(--ink-soft)}
+  .ga{font-size:14px;fill:var(--ink-faint);font-weight:700;letter-spacing:.08em}
+  .gp{font-size:17px;fill:#e0653a;font-weight:700}
+  .gp2{font-size:14px;fill:var(--ink-soft)}
+  .diag{stroke:#e0653a;stroke-width:2.5;fill:none}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="stage"><div id="deck">
+
+<!-- 1 -->
+<section class="slide cover on">
+  <div class="rule"></div>
+  <h1>生成AIに前提を渡す<br><em>個人での実験</em>と、そこで分かったこと</h1>
+  <p class="sub">道具より、測れた数字と、決めざるを得なかった設計判断の方に価値があると思っています。</p>
+  <div class="foot">私用のアカウント・私用の端末で実施。業務情報は一切扱っていません。<br>2026-09</div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">01</span> &nbsp;結論を先に</div>
+  <h2>測って分かった、<em>3つの数字</em></h2>
+  <div class="tiles">
+    <div class="tile">
+      <div class="fig">17<span class="u">倍</span></div>
+      <div class="cap">会話の再開は、続けるより重い</div>
+      <div class="note">利用コストは「どれだけ使うか」より、<b>文脈を作り直す回数</b>で決まる</div>
+    </div>
+    <div class="tile">
+      <div class="fig">47.8<span class="u">%</span></div>
+      <div class="cap">枠の半分近くが「助走」</div>
+      <div class="note">ある5時間枠で、本題に入る前の再開コストだけで消えた割合</div>
+    </div>
+    <div class="tile">
+      <div class="fig">2.1<span class="u">%</span></div>
+      <div class="cap">会話ログで残す価値があるのは</div>
+      <div class="note">記録は増やすほど良いわけではない。<b>捨てる基準</b>を先に決める</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">02</span> &nbsp;実測</div>
+  <h2>会話の再開は、続けるより<em>約17倍</em>重い</h2>
+  <p class="lede">同じ作業でも、キャッシュが切れてから再開すると消費が跳ね上がります。</p>
+  <div class="bars">
+    <div class="bar-row">
+      <div class="bar-label"><b>切れる前に続ける</b>そのまま作業を継続</div>
+      <div class="bar-track"><div class="bar" style="width:5.8%"></div><div class="bar-val">0.54%</div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label"><b>切れてから再開する</b>間を空けて戻る</div>
+      <div class="bar-track"><div class="bar hot" style="width:100%"></div><div class="bar-val">9.35%</div></div>
+    </div>
+  </div>
+  <div class="kicker"><b>効くのは再開の頻度ではなく、会話の大きさ。</b>
+    こまめに新しく立てる方が安く、大きく育ったものを放置して戻る方が高い。
+    利用量を抑えたいなら、使用を減らすより<b>作業を細切れにしない</b>方が効きます。</div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">03</span> &nbsp;実測</div>
+  <h2>ある5時間枠は、<em>47.8%</em> が再開コストだけで消えた</h2>
+  <p class="lede">本題に入る前の助走に、枠の半分近くを使っていたことになります。</p>
+  <div class="stack">
+    <div class="seg a" style="width:47.8%">再開コスト 47.8%</div>
+    <div class="seg c" style="width:52.2%">実際の作業 52.2%</div>
+  </div>
+  <div class="kicker">枠を消費しているのは<b>キャッシュの書き込みと出力</b>で、読み込みはほとんど使いません。
+    <b>長い文脈を持ち回ること自体は安く、文脈を作り直すことが高い。</b></div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">04</span> &nbsp;実測</div>
+  <h2>会話ログのうち、残す価値があるのは<em>2.1%</em></h2>
+  <p class="lede">残りはスクリーンショットとツールの出力です。目的はアーカイブではなく、文脈の継承。</p>
+  <div class="stack">
+    <div class="seg b" style="width:78%">スクリーンショット 78%</div>
+    <div class="seg c" style="width:19.6%">ツールの入出力 20%</div>
+    <div class="seg a" style="width:2.4%"></div>
+  </div>
+  <div class="stack-key">
+    <span><i class="sw" style="background:var(--accent)"></i>実際の発言 2.4% ← ここだけ残す</span>
+  </div>
+  <div class="kicker">書いたコードを残さないのは、<b>リポジトリ側に既にあり、なくてもAIが作り直せるから。</b>
+    一方で「なぜその作りにしたか」は会話の中にしか残りません。<br>
+    副次効果として、ツールの出力を捨てると<b>秘密情報が混入する経路の大半が最初から塞がります。</b></div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">05</span> &nbsp;何を作ったか</div>
+  <h2>3つ。ただし価値があるのは<em>作る過程</em>の方</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="num">01</div>
+      <h3>外部脳</h3>
+      <p>AIとの会話を自動で取り込み、判断基準・知識・案件の状況を抽出して、以後すべてのセッションの前提として読ませる。置き場所は Git、中身は Markdown。</p>
+    </div>
+    <div class="card">
+      <div class="num">02</div>
+      <h3>利用枠の自律実行</h3>
+      <p>使わなければ消える枠を見積もり、余る分で各案件を本人に聞かずに進める。同時に、外部脳の再現度テストを兼ねている。</p>
+    </div>
+    <div class="card">
+      <div class="num">03</div>
+      <h3>インナーソース基盤</h3>
+      <p>作った人の成果を、他の人がそのまま使い回せる状態を組織の中に作る設計。設計のみで、実装は試作段階。</p>
+    </div>
+  </div>
+  <div class="kicker">外部脳は<b>「本人ならこう判断する」を実行させ、後から本人が採点する</b>形で検証しています。
+    判断ログのない自律実行は、テストとしては価値がありません。</div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">06</span> &nbsp;設計</div>
+  <h2>同じ情報を2箇所に持つと、<em>必ず腐る</em></h2>
+  <figure>
+    <svg viewBox="0 0 1130 300" role="img"
+         aria-label="左: 上の層はパスだけを持ち、必要になった時点で下の層の事実を読みに行く。右: 上の層に事実を書き写すと二重管理になり、古い方が残る。">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#e0653a"/></marker>
+      </defs>
+      <text x="255" y="22" text-anchor="middle" class="dh">正典を1つにする</text>
+      <text x="875" y="22" text-anchor="middle" class="dh bad">事実を書き写す</text>
+      <line x1="565" y1="40" x2="565" y2="280" class="dsplit"/>
+
+      <rect x="60" y="46" width="390" height="76" rx="9" class="dbox"/>
+      <text x="255" y="78" text-anchor="middle" class="dt">上の層</text>
+      <text x="255" y="103" text-anchor="middle" class="ds">どこを読めばよいか（パスだけ）</text>
+      <line x1="255" y1="122" x2="255" y2="192" class="darr" marker-end="url(#a1)"/>
+      <text x="270" y="152" class="de">必要になった</text>
+      <text x="270" y="172" class="de">時点で読みに行く</text>
+      <rect x="60" y="192" width="390" height="76" rx="9" class="dbox"/>
+      <text x="255" y="224" text-anchor="middle" class="dt">下の層</text>
+      <text x="255" y="249" text-anchor="middle" class="ds">事実（ここだけが持つ）</text>
+
+      <rect x="680" y="46" width="390" height="76" rx="9" class="dbox bad"/>
+      <text x="875" y="78" text-anchor="middle" class="dt">上の層</text>
+      <text x="875" y="103" text-anchor="middle" class="ds bad">事実の写し</text>
+      <line x1="875" y1="122" x2="875" y2="192" class="darr bad" marker-end="url(#a2)"/>
+      <text x="890" y="162" class="de bad">更新がずれる</text>
+      <rect x="680" y="192" width="390" height="76" rx="9" class="dbox bad"/>
+      <text x="875" y="224" text-anchor="middle" class="dt">下の層</text>
+      <text x="875" y="249" text-anchor="middle" class="ds bad">事実（本物）</text>
+      <text x="875" y="292" text-anchor="middle" class="dn bad">古い方が残り、推論を狂わせる</text>
+      <text x="255" y="292" text-anchor="middle" class="dn">事実は1箇所。古くならない</text>
+    </svg>
+    <figcaption>上の層が持つのは「どこを読めばよいか」だけ。事実を書き写した瞬間に二重管理になり、どちらかが必ず古くなる。</figcaption>
+  </figure>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">07</span> &nbsp;設計</div>
+  <h2>人は毎回の判断者ではなく、<em>キャリブレーションの相手</em></h2>
+  <div class="bars" style="margin-top:40px">
+    <div class="bar-row" style="grid-template-columns:200px 1fr">
+      <div class="bar-label"><b>取り込み</b>機械</div>
+      <div class="bar-track" style="height:auto"><div style="font-size:19px;color:var(--ink-faint)">人の関与 — 無し</div></div>
+    </div>
+    <div class="bar-row" style="grid-template-columns:200px 1fr">
+      <div class="bar-label"><b>抽出・抽象化</b>AI</div>
+      <div class="bar-track" style="height:auto"><div style="font-size:19px;color:var(--ink-faint)">人の関与 — 無し</div></div>
+    </div>
+    <div class="bar-row" style="grid-template-columns:200px 1fr">
+      <div class="bar-label"><b>検証・修正</b>人</div>
+      <div class="bar-track" style="height:auto"><div style="font-size:19px;color:var(--accent);font-weight:700">問われたときに答える／後から訂正する</div></div>
+    </div>
+  </div>
+  <div class="kicker"><b>毎回チェックする運用は、量が増えた瞬間に崩れます。</b>
+    AIが判断して書き、人は後から直す。そのかわりAI側には「確信が持てないときは、黙って決めずに問え」と指示しておく。</div>
+</section>
+
+<!-- 9 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">08</span> &nbsp;組織に広げるとき</div>
+  <h2>情報の帰属は<em>一次元ではない</em></h2>
+  <p class="lede">少なくとも3つのカットが交差します。まだ設計ではなく、仮説です。</p>
+  <figure>
+    <svg viewBox="0 0 1130 250" role="img"
+         aria-label="組織（全社・事業部・チーム）と職位が格子をなし、プロジェクトがその両方を斜めに横切る。">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#e0653a"/></marker>
+      </defs>
+      <g class="grid">
+        <line x1="180" y1="40" x2="180" y2="200"/><line x1="380" y1="40" x2="380" y2="200"/>
+        <line x1="580" y1="40" x2="580" y2="200"/><line x1="780" y1="40" x2="780" y2="200"/>
+        <line x1="180" y1="70" x2="780" y2="70"/><line x1="180" y1="120" x2="780" y2="120"/>
+        <line x1="180" y1="170" x2="780" y2="170"/>
+      </g>
+      <text x="280" y="30" text-anchor="middle" class="gl">全社</text>
+      <text x="480" y="30" text-anchor="middle" class="gl">事業部</text>
+      <text x="680" y="30" text-anchor="middle" class="gl">チーム</text>
+      <text x="480" y="228" text-anchor="middle" class="ga">横軸 — 組織</text>
+      <text x="165" y="76" text-anchor="end" class="gl">上位</text>
+      <text x="165" y="126" text-anchor="end" class="gl">中位</text>
+      <text x="165" y="176" text-anchor="end" class="gl">担当</text>
+      <text x="60" y="126" text-anchor="middle" class="ga">縦軸<tspan x="60" dy="20">職位</tspan></text>
+      <line x1="210" y1="196" x2="800" y2="52" class="diag" marker-end="url(#a3)"/>
+      <text x="812" y="58" class="gp">プロジェクト</text>
+      <text x="812" y="80" class="gp2">部署をまたぐので</text>
+      <text x="812" y="100" class="gp2">上の2つと直交する</text>
+    </svg>
+  </figure>
+  <div class="kicker"><b>「全部見せる」も正解ではありません。</b>隣の部署を知っておいた方がよい場合もあり、
+    境界を閉じれば済む話ではない。<b>人ではなく組織に情報を紐づければ、異動しても参照先が自動的に切り替わります。</b></div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">09</span> &nbsp;現在地</div>
+  <h2>できているのは、<em>最初の1段階だけ</em></h2>
+  <div class="track">
+    <div class="step done"><div class="s">01</div><div class="t">AIとの会話<br>実装済み</div></div>
+    <div class="step"><div class="s">02</div><div class="t">会議の<br>書き起こし</div></div>
+    <div class="step"><div class="s">03</div><div class="t">チャット<br>メール</div></div>
+    <div class="step"><div class="s">04</div><div class="t">対面の会話<br>の録音</div></div>
+    <div class="step"><div class="s">05</div><div class="t">画面・<br>操作ログ</div></div>
+    <div class="step"><div class="s">06</div><div class="t">知覚できない<br>情報</div></div>
+  </div>
+  <div class="kicker">組織全体の設計は遠い道のりになります。それを待たず、<b>まず個人単位の個別最適から始める</b>という順序をとりました。
+    ベストではないと分かったうえでの選択で、<b>後で組織単位に拡張できない設計にはしない</b>という制約は置いています。</div>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">10</span> &nbsp;正直なところ</div>
+  <h2>解けていないこと</h2>
+  <div class="points">
+    <div class="point">
+      <div class="k">01</div>
+      <div><h3>情報が最新化されない</h3>
+        <p>溜める仕組みはできても、古くなった情報を検出して直す規律が、人力の運用しかありません。<b>これが一番の課題</b>だと思っています。</p></div>
+    </div>
+    <div class="point">
+      <div class="k">02</div>
+      <div><h3>規模が増えたときの検索</h3>
+        <p>現状は目次を頼りにAIが読みに行く方式で、索引もベクトル検索も持ちません。破綻する条件は先に決めてありますが、そのときの手は決めていません。</p></div>
+    </div>
+    <div class="point">
+      <div class="k">03</div>
+      <div><h3>実務に効くのは大量の日常ファイルの方</h3>
+        <p>規則やマニュアルは数が限られますが、実際に効くのは「昨日作った集計ファイル」のようなものです。そこは未着手です。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <div class="eyebrow"><span class="n">11</span> &nbsp;参照先</div>
+  <h2>仕組みは公開してあります</h2>
+  <div class="refs">
+    <div class="ref"><b>外部脳の仕組み一式</b><span>github.com/feseisen/ai-context-kit</span></div>
+    <div class="ref"><b>利用枠の自律実行と実測値</b><span>github.com/feseisen/usage-autopilot-public</span></div>
+    <div class="ref"><b>インナーソース基盤の設計</b><span>github.com/feseisen/innersource-commons</span></div>
+    <div class="ref"><b>この資料の全文（文章版）</b><span>ai-context-kit / docs/overview-ja.md</span></div>
+  </div>
+  <div class="kicker"><b>数字はいずれも実測です。</b>ただし特定の構成・特定の期間での測定なので、環境が違えば係数は変わります。
+    <b>数字そのものより、測り方の方を持っていく</b>のが向いていると思います。</div>
+</section>
+
+</div></div>
+
+<div id="bar"><i></i></div>
+<div id="hud">
+  <span id="count"></span>
+  <button type="button" id="prev" aria-label="前のスライド">←</button>
+  <button type="button" id="next" aria-label="次のスライド">→</button>
+  <button type="button" id="fs">全画面 (F5)</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var fill = document.querySelector("#bar i");
+  var count = document.getElementById("count");
+  var at = 0;
+
+  // 1280x720 の設計座標を画面いっぱいに収める。拡大縮小なので配置は崩れない。
+  function fit(){
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    deck.style.transform = "scale(" + s + ")";
+  }
+
+  function show(n){
+    at = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(s, i){ s.classList.toggle("on", i === at); });
+    fill.style.width = ((at + 1) / slides.length * 100) + "%";
+    count.textContent = (at + 1) + " / " + slides.length;
+    try { location.hash = at ? "s" + (at + 1) : ""; } catch(e){}
+  }
+
+  function full(){
+    var el = document.documentElement;
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+  }
+
+  document.getElementById("prev").addEventListener("click", function(){ show(at - 1); });
+  document.getElementById("next").addEventListener("click", function(){ show(at + 1); });
+  document.getElementById("fs").addEventListener("click", full);
+
+  document.addEventListener("keydown", function(e){
+    switch(e.key){
+      case "F5":        e.preventDefault(); full(); break;
+      case "ArrowRight": case "PageDown": case " ": case "Enter":
+        e.preventDefault(); show(at + 1); break;
+      case "ArrowLeft": case "PageUp": case "Backspace":
+        e.preventDefault(); show(at - 1); break;
+      case "Home": e.preventDefault(); show(0); break;
+      case "End":  e.preventDefault(); show(slides.length - 1); break;
+    }
+  });
+
+  // クリックでも進む（画面の右寄り／左寄り）。操作ボタンの上では効かせない。
+  deck.addEventListener("click", function(e){
+    if (e.target.closest("#hud")) return;
+    show(e.clientX > window.innerWidth / 2 ? at + 1 : at - 1);
+  });
+
+  window.addEventListener("resize", fit);
+  fit();
+  var m = /^#s(\d+)$/.exec(location.hash);
+  show(m ? parseInt(m[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>
