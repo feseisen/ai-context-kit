@@ -27,9 +27,13 @@
 - （まだエントリなし。`areas/threads/_template.md` からコピーして作成）
 
 ## raw（未加工の元データ）
-- [sessions/](raw/sessions/) — AIとの会話ログ（自動生成）
-- [memory/](raw/memory/) — AIが自分で書いた記憶ファイルの写し
-- [attachments/](raw/attachments/) — 画像から読み取った情報の書き起こし
+
+このキットには [`raw/README.md`](raw/README.md) だけが入っています。下の3つは、
+取り込みツールを走らせると作られるフォルダです（空なので同梱していません）。
+
+- `raw/sessions/` — AIとの会話ログ（自動生成）
+- `raw/memory/` — AIが自分で書いた記憶ファイルの写し
+- `raw/attachments/` — 画像から読み取った情報の書き起こし
 
 ## 運用ルール（AI向け）
 - [AGENTS.md](AGENTS.md) — 扱ってはいけない情報／別リポジトリの案件の扱い／重複の判定
