@@ -14,6 +14,9 @@
 - [**目指している状態（この試みの幹）**](areas/self/vision.md) — まずここを読む
 - （`thinking-principles.md` / `working-with-ai.md` / `voice.md` は、会話から抽出でき次第ここに追加する）
 
+## areas/practice（生成AIと組むときの原則）★骨組みの層
+- [**原則の一覧と、1件の型**](areas/practice/README.md) — 作者の原則が入っている。人に渡せるのはこの層だけ
+
 ## areas/dev-environment（開発環境）
 - （まだエントリなし）
 

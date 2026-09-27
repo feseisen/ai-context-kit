@@ -193,7 +193,7 @@ flowchart TD
 
 | 内容 | 場所 |
 |---|---|
-| 外部脳の仕組み一式（中身は空の雛形） | [ai-context-kit](https://github.com/feseisen/ai-context-kit) |
+| 外部脳の仕組み一式（個人の中身は空の雛形。生成AIと組むときの原則は入っている） | [ai-context-kit](https://github.com/feseisen/ai-context-kit) |
 | AIエージェント向けの規定 | [AGENTS.md](https://github.com/feseisen/ai-context-kit/blob/main/AGENTS.md) |
 | 利用枠の自律実行と実測値 | [usage-autopilot-public](https://github.com/feseisen/usage-autopilot-public) |
 | インナーソース基盤の設計 | [innersource-commons](https://github.com/feseisen/innersource-commons) |

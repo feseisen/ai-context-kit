@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"<このリポジトリの絶対パス>/tools/auto-sync.py\"",
+            "async": true,
+            "timeout": 120,
+            "statusMessage": "会話ログを外部脳に同期中"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"<このリポジトリの絶対パス>/tools/auto-sync.py\"",
+            "async": true,
+            "timeout": 120,
+            "statusMessage": "会話ログを外部脳に同期中"
+          }
+        ]
+      }
+    ]
+  }
+}
