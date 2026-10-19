@@ -192,7 +192,7 @@ def main():
             with open(out, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(md)
 
-    # Claude.ai の記憶
+    # Claude.ai のメモリ
     mem_files = glob.glob(os.path.join(args.export_dir, "memories", "*.json"))
     written = 0
     for f in mem_files:
@@ -205,7 +205,7 @@ def main():
             if not name.endswith(".md"):
                 name += ".md"
             body = ["---",
-                    "title: Claude.ai の記憶 " + path,
+                    "title: Claude.ai のメモリ " + path,
                     "area: raw",
                     "source: claude-ai-memory",
                     "original_path: " + path,
@@ -214,22 +214,22 @@ def main():
                     "tags: [memory, claude-ai]",
                     "---",
                     "",
-                    "# Claude.ai の記憶: `" + path + "`",
+                    "# Claude.ai のメモリ: `" + path + "`",
                     "",
-                    "> claude.ai が会話から自動生成した記憶。原文のまま。",
+                    "> claude.ai が会話から自動生成したメモリ。原文のまま。",
                     "",
                     "```",
                     (mf.get("content") or "").strip(),
                     "```"]
             text = redact("\n".join(body) + "\n", "memory")
             written += 1
-            print("  記憶: {}".format(path))
+            print("  メモリ: {}".format(path))
             if not args.dry_run:
                 os.makedirs(MEM_DIR, exist_ok=True)
                 with open(os.path.join(MEM_DIR, name), "w", encoding="utf-8", newline="\n") as fh:
                     fh.write(text)
 
-    print("\n合計: 会話 {:.2f}MB / 記憶 {} 件".format(total_out / 1024.0 / 1024, written))
+    print("\n合計: 会話 {:.2f}MB / メモリ {} 件".format(total_out / 1024.0 / 1024, written))
     if redactions:
         print("\n!! REDACTED (要確認) !!")
         seen = {}

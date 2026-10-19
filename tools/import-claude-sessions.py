@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Claude Code のセッションログ (~/.claude/projects/**/*.jsonl) を、
-second-brain の raw/sessions/ に「会話だけ」のMarkdownとして取り込む。
+このリポジトリの raw/sessions/ に「会話だけ」のMarkdownとして取り込む。
 
 方針（AGENTS.md の「rawは原文のまま」を、ノイズ除去と両立させる）:
   - 人間とClaudeの「発言」は一字一句そのまま残す（ここが知識の本体）
   - ツール操作は「何をしたか」の1行だけ残す（コマンドやファイル名。中身は残さない）
-  - ツールの出力・スクリーンショット・システム挿入文は捨てる（再現可能なノイズ）
+  - ツールの出力・スクリーンショット・システムが自動で差し込んだ文は捨てる（会話の本筋ではなく、必要ならあとから再現できるため）
   - 認証情報らしき文字列は自動で伏字にし、実行時に必ず画面へ報告する
 
 使い方:
@@ -136,7 +136,7 @@ def load_session(path):
         if t not in ("user", "assistant"):
             continue
 
-        # isMeta はシステムが会話に注入した内容（スキルの指示文など）の印。
+        # isMeta は、システムが会話に差し込んだ内容（スキルの指示文など）であることを示すフラグ。
         # 本人が書いた発言ではないので取り込まない。実測では、これだけで
         # 全体の約半分（250KB）を占めるノイズだった。
         if d.get("isMeta"):
@@ -336,11 +336,11 @@ def main():
             with open(out, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(md)
 
-        # 同じ会話が別名で残っていたら畳む（新しい方が短ければ消さない）
+        # 同じ会話が別名で残っていたらまとめる（新しい方が短ければ消さない）
         for old_path, old_name in stale:
             old_size = os.path.getsize(old_path)
             if len(md.encode()) >= old_size:
-                print("    畳んだ: {} -> {}".format(
+                print("    まとめた: {} -> {}".format(
                     os.path.basename(old_path), os.path.basename(out)))
                 if not args.dry_run:
                     os.remove(old_path)

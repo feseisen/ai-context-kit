@@ -22,7 +22,7 @@
 self/
 ├── vision.md                目指している状態（★最初に書く。すべての幹）
 ├── thinking-principles.md   思考様式・判断基準（＝能力の核）
-├── working-with-ai.md       AIとの働き方の好み・常設指示
+├── working-with-ai.md       AIとの働き方の好み・今後も守る指示
 └── voice.md                 口調・言い回し（＝キャラクター性）
 ```
 

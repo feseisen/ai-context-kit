@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# second-brain: 秘密情報の誤コミットを防ぐ pre-commit フック
+# 秘密情報の誤コミットを防ぐ、このリポジトリの pre-commit フック
 #
 # GitHub の push protection は無料プランの private リポジトリでは利用できないため、
 # その代替としてローカルで最低限のチェックを行う。

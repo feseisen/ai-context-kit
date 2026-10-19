@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-受け取ったキットを、その場で使える状態にする（下書き）。
+受け取ったキットを、その場で使える状態にする（試作）。
 
-ZIP を展開したフォルダで1回走らせると、README の手順1〜5のうち、手でやると
-間違えやすいところをまとめて済ませる。何度走らせても同じ結果になる。
+ZIP を展開したフォルダで1回実行すると、README の手順1〜5のうち、手でやると
+間違えやすいところをまとめて済ませる。何度実行しても同じ結果になる。
 
 やること:
-  1. フォルダの骨組みをそろえる（raw/ と areas/ の各フォルダ）      キットの中
+  1. フォルダを用意する（raw/ と areas/ の各フォルダ）              キットの中
   2. git の準備（git init と、秘密情報を止めるフックの有効化）       キットの中
   3. Claude Code の共通の指示（CLAUDE.md）に、このキットへの入口を書く  キットの外
   4. Claude Code の設定（settings.json）に、会話を取り込むフックを足す  キットの外
@@ -14,7 +14,7 @@ ZIP を展開したフォルダで1回走らせると、README の手順1〜5の
 キットの外（3と4）は、書く前に必ず
   - 何がどう変わるかを見せ、
   - y/N で聞き（Enter だけなら書かない）、
-  - 元のファイルを同じ場所に写してから書く。
+  - 元のファイルを同じ場所にコピーしてから書く。
 既にある設定は消さない。足すだけ（動かなくなった古い登録だけは外す。それも見せてから）。
 
 使い方:
@@ -58,7 +58,7 @@ STATUS_MESSAGE = "会話ログを外部脳に同期中"
 
 
 def posix(p: Path | str) -> str:
-    """設定に書くパスは `/` 区切りにする。Windows でも、フックを走らせる shell を選ばない。"""
+    """設定に書くパスは `/` 区切りにする。Windows でも、フックを実行する shell を選ばない。"""
     return str(p).replace("\\", "/")
 
 
@@ -105,19 +105,22 @@ def show_diff(path: Path, old: str, new: str) -> None:
 
 
 def write_outside(path: Path, old: str | None, new: str, dry_run: bool) -> bool:
-    """キットの外のファイルを書く。変更を見せ、聞き、写してから書く。"""
+    """キットの外のファイルを書く。変更を見せ、聞き、コピーしてから書く。"""
     show_diff(path, old or "", new)
     if dry_run:
         say("予定", f"{path} を書き換える（--dry-run なので書かない）")
         return False
     if not ask(f"{path} をこの内容で書きますか"):
         say(
-            "飛ばす", "書きませんでした。あとで手で足すなら README の手順を見てください"
+            "スキップ",
+            "書きませんでした。あとで手で足すなら README の手順を見てください",
         )
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
-        say("写し", f"元のファイルを {backup(path).name} に写しました")
+        say(
+            "バックアップ", f"元のファイルを {backup(path).name} にバックアップしました"
+        )
     path.write_text(new, encoding="utf-8", newline="\n")
     say("書いた", str(path))
     return True
@@ -127,7 +130,7 @@ def write_outside(path: Path, old: str | None, new: str, dry_run: bool) -> bool:
 # 1. フォルダ
 # ---------------------------------------------------------------------------
 def step_folders(dry_run: bool) -> None:
-    print("\n1. フォルダの骨組み")
+    print("\n1. フォルダの用意")
     missing = [f for f in FOLDERS if not (KIT / f).is_dir()]
     if not missing:
         say("済", "そろっています")
@@ -157,8 +160,8 @@ def step_git(dry_run: bool) -> bool:
     print("\n2. git の準備")
     if shutil.which("git") is None:
         say(
-            "飛ばす",
-            "git が見つかりません。入れてから、もう一度このセットアップを走らせてください",
+            "スキップ",
+            "git が見つかりません。インストールしてから、もう一度このセットアップを実行してください",
         )
         return False
 
@@ -168,10 +171,13 @@ def step_git(dry_run: bool) -> bool:
         # 別のリポジトリの中に展開された。そこで init すると入れ子になり、フックの設定も
         # 外側のリポジトリに書いてしまうので、何もしない
         say(
-            "止める",
+            "スキップ",
             f"このフォルダは別の git リポジトリ（{top.stdout.strip()}）の中にあります",
         )
-        say("止める", "キットのフォルダを、git 管理の外に移してから走らせてください")
+        say(
+            "スキップ",
+            "キットのフォルダを git 管理の外に移してから、もう一度実行してください",
+        )
         return False
     if not here:
         if dry_run:
@@ -189,31 +195,34 @@ def step_git(dry_run: bool) -> bool:
     hook = KIT / ".githooks" / "pre-commit"
     if not hook.is_file():
         say(
-            "飛ばす",
+            "スキップ",
             ".githooks/pre-commit がありません。キットが欠けていないか確かめてください",
         )
         return here
     # ZIP で渡ると実行の権限が落ちることがある（Windows の git は見ないので、macOS・Linux 向け）
     if os.name != "nt" and not os.access(hook, os.X_OK):
         if dry_run:
-            say("予定", ".githooks/pre-commit に実行の権限を付ける")
+            say("予定", ".githooks/pre-commit に実行権限を付ける")
         else:
             hook.chmod(hook.stat().st_mode | 0o111)
-            say("直した", ".githooks/pre-commit に実行の権限を付けました")
+            say("直した", ".githooks/pre-commit に実行権限を付けました")
 
     current = git("config", "--local", "core.hooksPath").stdout.strip() if here else ""
     if current == ".githooks":
-        say("済", "秘密情報を止めるフックは有効です")
+        say("済", "秘密情報のコミットを止めるフックは有効です")
     elif dry_run:
         say("予定", "git config core.hooksPath .githooks")
     else:
         git("config", "core.hooksPath", ".githooks")
-        say("作った", "秘密情報を止めるフックを有効にしました（core.hooksPath）")
+        say(
+            "作った",
+            "秘密情報のコミットを止めるフックを有効にしました（core.hooksPath）",
+        )
 
     if here and not git("remote").stdout.strip():
         say(
             "注意",
-            "push 先（remote）がありません。無くても動きます（push だけ失敗し、止まらない）",
+            "push 先（remote）がありません。無くても動きます（push だけが失敗し、止まりはしません）",
         )
     return True
 
@@ -224,7 +233,7 @@ def step_git(dry_run: bool) -> bool:
 def entry_block() -> str:
     return (
         f"{BEGIN}\n"
-        f"判断基準の正典は {posix(KIT)} にある。\n"
+        f"判断基準の正本は {posix(KIT)} にある。\n"
         "作業を始める前に、そこの CLAUDE.md → AGENTS.md → areas/self/vision.md → index.md の順に読む。\n"
         f"{END}\n"
     )
@@ -246,7 +255,7 @@ def step_claude_md(dry_run: bool) -> None:
             return
         say(
             "更新",
-            "前に書いた入口の場所が違うので、書き直します（キットを動かした場合）",
+            "前に書いた入口が今の内容と違うので、書き直します（キットのフォルダを移動した場合など）",
         )
         new = text[:start] + block + text[stop:]
     else:
@@ -263,7 +272,7 @@ def step_claude_md(dry_run: bool) -> None:
 # 4. 設定（settings.json）
 # ---------------------------------------------------------------------------
 def hook_command() -> str:
-    # 走らせている Python をそのまま使う。`python` という名前が通らない端末でも動く
+    # 実行している Python をそのまま使う。`python` というコマンド名が使えない端末でも動く
     return f'"{posix(sys.executable)}" "{posix(SYNC)}"'
 
 
@@ -272,7 +281,7 @@ def is_sync_command(cmd: str) -> bool:
 
 
 def sync_target(cmd: str) -> Path | None:
-    """登録済みの命令文から auto-sync.py のパスを取り出す。"""
+    """登録済みのコマンドから auto-sync.py のパスを取り出す。"""
     for part in cmd.split('"'):
         if posix(part).endswith("tools/auto-sync.py"):
             return Path(part)
@@ -285,12 +294,12 @@ def merge_hooks(settings: dict) -> tuple[dict, list[str]]:
     merged = json.loads(json.dumps(settings))
     hooks = merged.setdefault("hooks", {})
     if not isinstance(hooks, dict):
-        raise ValueError("settings.json の hooks が想定と違う形です")
+        raise ValueError("settings.json の hooks が想定と違う形式です")
     mine = posix(SYNC)
     for event in HOOK_EVENTS:
         groups = hooks.setdefault(event, [])
         if not isinstance(groups, list):
-            raise ValueError(f"settings.json の hooks.{event} が想定と違う形です")
+            raise ValueError(f"settings.json の hooks.{event} が想定と違う形式です")
         found = False
         emptied = []
         for group in groups:
@@ -338,7 +347,7 @@ def step_settings(dry_run: bool) -> None:
     print(f"\n4. Claude Code の設定（{path}）")
     if not SYNC.is_file():
         say(
-            "飛ばす",
+            "スキップ",
             "tools/auto-sync.py がありません。キットが欠けていないか確かめてください",
         )
         return
@@ -350,7 +359,7 @@ def step_settings(dry_run: bool) -> None:
         merged, notes = merge_hooks(settings)
     except (json.JSONDecodeError, ValueError) as e:
         say(
-            "止める",
+            "スキップ",
             f"読めませんでした（{e}）。書き換えずに進みます。README の手順4を手で行ってください",
         )
         return

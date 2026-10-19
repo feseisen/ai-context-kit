@@ -11,3 +11,6 @@ Thumbs.db
 *.pem
 *.key
 secrets/
+
+# Python が作る中間ファイル
+__pycache__/

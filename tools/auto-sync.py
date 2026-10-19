@@ -91,7 +91,7 @@ def summarize(changed):
 
 def main():
     if not os.path.isdir(os.path.join(REPO, ".git")):
-        log("second-brain がGitリポジトリではないため中止")
+        log("このリポジトリがGitリポジトリではないため中止")
         return 0
     if not acquire_lock():
         log("別の取り込みが実行中のためスキップ")
@@ -146,7 +146,7 @@ def main():
                 "suppressOutput": True,
             }, ensure_ascii=False))
     except Exception as e:  # フックがセッションを壊さないよう、必ず握りつぶす
-        log("例外: {}".format(e))
+        log("エラー: {}".format(e))
     finally:
         release_lock()
     return 0
